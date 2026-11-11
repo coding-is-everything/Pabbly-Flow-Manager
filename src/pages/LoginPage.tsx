@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Mail, ShieldCheck, Workflow } from 'lucide-react';
+import { ArrowLeft, Mail, ShieldCheck, Terminal, Workflow } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { errorMessage } from '../lib/api';
 import { Button, ErrorBanner, Field, Input, PageLoader } from '../components/ui';
@@ -26,6 +26,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState(readLastEmail);
   const [code, setCode] = useState('');
   const [info, setInfo] = useState('');
+  const [delivery, setDelivery] = useState<'email' | 'terminal'>('email');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [resendIn, setResendIn] = useState(0);
@@ -57,6 +58,7 @@ export default function LoginPage() {
         /* storage unavailable — not important */
       }
       setInfo(res.message);
+      setDelivery(res.delivery ?? 'email');
       setResendIn(res.resend_after);
       setCode('');
       setStep('code');
@@ -98,7 +100,11 @@ export default function LoginPage() {
           </div>
           <h1 className="mt-4 text-xl font-semibold text-white">Pabbly Flow Manager</h1>
           <p className="mt-1 text-sm text-slate-400">
-            {step === 'email' ? 'Sign in with a one-time code sent to your email' : 'Check your inbox for the code'}
+            {step === 'email'
+              ? 'Sign in with a one-time code sent to your email'
+              : delivery === 'terminal'
+                ? 'Get the code from the npm run dev terminal'
+                : 'Check your inbox for the code'}
           </p>
         </div>
 
@@ -134,10 +140,20 @@ export default function LoginPage() {
               }}
               className="space-y-4"
             >
-              <div className="flex items-start gap-2 rounded-lg bg-indigo-50 px-3 py-2.5 text-sm text-indigo-900">
-                <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-                <span>{info} Check spam if you don’t see it.</span>
-              </div>
+              {delivery === 'terminal' ? (
+                <div className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-900 ring-1 ring-amber-200">
+                  <Terminal className="mt-0.5 size-4 shrink-0" />
+                  <span>
+                    <b>Local mode — no email is sent.</b> <code className="text-xs">SMTP_HOST</code> is empty in <code className="text-xs">.env</code>, so the
+                    code is printed in the terminal running <code className="text-xs">npm run dev</code>. Fill the SMTP settings to receive real emails.
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 rounded-lg bg-indigo-50 px-3 py-2.5 text-sm text-indigo-900">
+                  <ShieldCheck className="mt-0.5 size-4 shrink-0" />
+                  <span>{info} Check spam if you don’t see it.</span>
+                </div>
+              )}
               {error && <ErrorBanner message={error} />}
               <Field label={`${CODE_LENGTH}-digit code`}>
                 <Input

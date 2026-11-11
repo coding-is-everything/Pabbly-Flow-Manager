@@ -20,6 +20,41 @@ function getTransporter() {
   return transporter;
 }
 
+/** Connects and logs in to the SMTP server without sending anything. Throws on failure. */
+export async function verifyMail() {
+  await getTransporter().verify();
+}
+
+/** One-line description of where mail goes, safe to print (no password). */
+export function mailSummary() {
+  if (!mailConfigured()) return 'SMTP_HOST is empty';
+  const { host, port, secure, user } = config.smtp;
+  return `${host}:${port} (${secure ? 'SSL' : 'STARTTLS'}) as ${user || '(no login)'}, from "${config.mailFrom || '(MAIL_FROM empty)'}"`;
+}
+
+/** Turns common SMTP errors into a plain-English fix. */
+export function mailHint(err) {
+  const msg = `${err?.code || ''} ${err?.responseCode || ''} ${err?.message || ''}`;
+  const { port, secure, host } = config.smtp;
+  if (/EAUTH|535|534|Invalid login|Username and Password not accepted|Authentication/i.test(msg)) {
+    return [
+      'The SMTP server rejected SMTP_USER / SMTP_PASS.',
+      host.includes('gmail') ? 'Gmail needs an App Password (Google Account → Security → 2-Step Verification → App passwords), not your normal password.' : '',
+      host.includes('zoho') ? 'Zoho needs an app-specific password (Zoho Account → Security → App Passwords). Also check the host: use smtp.zoho.in for accounts on zoho.in and smtp.zoho.com for zoho.com.' : '',
+    ].filter(Boolean).join(' ');
+  }
+  if (/ENOTFOUND|EAI_AGAIN/i.test(msg)) return `The host "${host}" could not be found. Check SMTP_HOST for typos and that this computer is online.`;
+  if (/ETIMEDOUT|ECONNREFUSED|ESOCKET|ECONNECTION|Greeting never received|wrong version number/i.test(msg)) {
+    if (port === 465 && !secure) return 'Port 465 needs SMTP_SECURE=true (or remove SMTP_SECURE).';
+    if (port === 587 && secure) return 'Port 587 needs SMTP_SECURE=false (or remove SMTP_SECURE).';
+    return `Could not connect to ${host}:${port}. Check SMTP_HOST/SMTP_PORT. Some networks block outgoing mail ports — try 587 instead of 465 (or the other way round).`;
+  }
+  if (/553|550|554|sender|not owned|relay|From/i.test(msg)) {
+    return `The server refused the sender. MAIL_FROM must be an address your SMTP account may send from — usually exactly SMTP_USER (${config.smtp.user || 'empty'}).`;
+  }
+  return 'See the error above. Check every SMTP_* value in .env.';
+}
+
 export async function sendMail({ to, subject, text, html }) {
   if (!mailConfigured()) {
     if (config.isProd) {

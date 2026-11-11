@@ -14,7 +14,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "migrate": "node server/scripts/migrate.js",
-    "create-admin": "node server/scripts/create-admin.js"
+    "create-admin": "node server/scripts/create-admin.js",
+    "test-email": "node server/scripts/test-email.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

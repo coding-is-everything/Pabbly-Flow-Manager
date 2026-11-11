@@ -322,9 +322,41 @@ Existing users keep their accounts and roles; they just sign in with their email
 
 ## Troubleshooting
 
+### Login code not arriving (on your computer)
+
+Look at the terminal running `npm run dev`. When the API starts it prints three lines that tell you what's wrong:
+
+```
+API running on http://localhost:4000
+Database: ✓ connected
+Email: ✓ SMTP login OK — smtp.zoho.in:465 (SSL) as no-reply@…, from "…"
+```
+
+| What the terminal shows | Meaning and fix |
+|---|---|
+| `Email: SMTP_HOST is empty → login codes are PRINTED BELOW` | No email is sent locally. After you click *Send login code*, the code appears in this terminal (`──── [DEV] email to … ────`), and the login page shows **Local mode**. Fill the `SMTP_*` values in `.env` to get real emails. |
+| `Email: ✗ SMTP login FAILED` + `Fix: …` | The SMTP settings are wrong. Follow the `Fix:` line (usually an App Password instead of the normal password, the Zoho region host `smtp.zoho.in` vs `smtp.zoho.com`, or port 465 vs 587). |
+| `[login] No user with email … — no code was sent` | That email isn't a user. Run `npm run create-admin -- "Your Name" that@email.com`. Emails must match exactly (case doesn't matter). |
+| `[login] A code was sent … still unused — not sending another yet` | You clicked again within 60 seconds. Use the code already sent, or wait for the countdown. |
+| `[login] Code emailed to …` but nothing in the inbox | Check spam / promotions. With Gmail or Zoho, `MAIL_FROM` should be exactly your `SMTP_USER` address. |
+| `Database: ✗ tables missing — run: npm run migrate` | Run `npm run migrate` (the OTP update adds a table). |
+| `Database: ✗ cannot connect` | `DATABASE_URL` / `DB_SSL` in `.env` is wrong, or the database is down. |
+
+Test the email settings on their own, without signing in:
+
+```bash
+npm run test-email -- you@yourcompany.com
+```
+
+It logs in to the SMTP server, sends one test email, and prints the exact error plus a fix if anything fails.
+
+Changes to `.env` are picked up automatically: the API restarts itself when you save the file.
+
+### Other problems
+
 | Problem | Fix |
 |---|---|
-| Code email never arrives | Check spam first. Then open `/api/health`: if it says `"email":"not configured"`, the SMTP variables are missing in Vercel (redeploy after adding them). If it says `configured`, look at Vercel → Logs for `Sending login code failed:`, which shows the SMTP error (usually a wrong app password, or `MAIL_FROM` not allowed by the provider). |
+| Code email never arrives (on Vercel) | Check spam first. Then open `/api/health`: if it says `"email":"not configured"`, the SMTP variables are missing in Vercel (redeploy after adding them). If it says `configured`, look at Vercel → Logs for `Sending login code failed:` and its `Fix:` line. Running `npm run test-email` locally with the same SMTP values shows the same error faster. |
 | "We could not send the email right now" | The SMTP server refused the email. Same log check as above. |
 | "Too many codes requested for this email" | More than 6 codes in an hour for that person. Wait an hour. |
 | "Too many code requests / wrong codes from this network" | Per-IP limit hit. Wait 15 minutes. |

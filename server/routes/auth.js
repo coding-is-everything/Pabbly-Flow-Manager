@@ -6,10 +6,16 @@ import { HttpError, badRequest } from '../lib/http.js';
 import { requireAuth, setSessionCookie, clearSessionCookie, publicUser } from '../lib/auth.js';
 import { email as validEmail } from '../lib/validate.js';
 import { codeMatches, generateCode, hashCode, normalizeCode } from '../lib/otp.js';
-import { sendOtpEmail } from '../lib/mailer.js';
+import { mailConfigured, mailHint, sendOtpEmail } from '../lib/mailer.js';
 
 const router = Router();
 const { otp } = config;
+
+// Local development only: explain in the terminal why no email went out.
+// Never in production, where it would reveal which emails have accounts.
+const devLog = (msg) => {
+  if (!config.isProd) console.log(`[login] ${msg}`);
+};
 
 // Per-IP limits. Counted per network, so they are generous enough for an office behind one IP.
 const requestLimiter = rateLimit({
@@ -35,18 +41,28 @@ const verifyLimiter = rateLimit({
  */
 router.post('/request-otp', requestLimiter, async (req, res) => {
   const email = validEmail(req.body?.email);
+  // Local dev without SMTP: tell the login page the code is in the terminal, not the inbox.
+  const delivery = !config.isProd && !mailConfigured() ? 'terminal' : 'email';
   const reply = (resendAfter = otp.resendSeconds) =>
     res.json({
       ok: true,
       message: `If ${email} has access, a ${otp.length}-digit code is on its way. It expires in ${otp.ttlMinutes} minutes.`,
       resend_after: resendAfter,
+      delivery,
     });
 
   // Housekeeping: drop codes older than a day.
   await query('DELETE FROM login_otps WHERE created_at < CURRENT_TIMESTAMP - INTERVAL 1 DAY');
 
   const user = await queryOne('SELECT * FROM users WHERE email = ?', [email]);
-  if (!user || !user.is_active) return reply();
+  if (!user) {
+    devLog(`No user with email ${email} — no code was sent. Add one with: npm run create-admin -- "Your Name" ${email}`);
+    return reply();
+  }
+  if (!user.is_active) {
+    devLog(`${email} is deactivated — no code was sent. Reactivate it on the Users page or with npm run create-admin.`);
+    return reply();
+  }
 
   // The cooldown only applies while an unused code is still pending; if the last code was
   // already used (or locked after wrong tries) a fresh one is sent straight away.
@@ -60,6 +76,7 @@ router.post('/request-otp', requestLimiter, async (req, res) => {
   const sincePending = recent.seconds_since_pending === null ? null : Number(recent.seconds_since_pending);
   if (sincePending !== null && sincePending < otp.resendSeconds) {
     // A code was sent moments ago and is still unused: don't send another, just say how long to wait.
+    devLog(`A code was sent to ${email} ${sincePending}s ago and is still unused — not sending another yet.`);
     return reply(otp.resendSeconds - sincePending);
   }
   if (Number(recent.last_hour) >= otp.maxPerHour) {
@@ -78,10 +95,11 @@ router.post('/request-otp', requestLimiter, async (req, res) => {
   try {
     await sendOtpEmail(user, code);
   } catch (err) {
-    console.error('Sending login code failed:', err.message);
+    console.error(`Sending login code failed: ${err.message}\n  Fix: ${mailHint(err)}`);
     await query('DELETE FROM login_otps WHERE id = ?', [result.insertId]);
     throw new HttpError(502, 'We could not send the email right now. Please try again in a minute, or ask an admin to check the email settings.');
   }
+  devLog(mailConfigured() ? `Code emailed to ${email}.` : `Code for ${email} printed above (SMTP_HOST is empty).`);
   reply();
 });
 

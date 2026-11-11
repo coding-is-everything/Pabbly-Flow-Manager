@@ -5,6 +5,8 @@ import type { User } from './types';
 export interface OtpRequestResult {
   message: string;
   resend_after: number;
+  /** "terminal" only when running locally without SMTP: the code is printed in the npm run dev terminal */
+  delivery: 'email' | 'terminal';
 }
 
 interface AuthValue {
