@@ -1,0 +1,63 @@
+{
+  "flows": [
+    {
+      "name": "Razorpay Payment → WhatsApp + Sheet (all reports)",
+      "folder": "Payments",
+      "status": "active",
+      "trigger_app": "Razorpay",
+      "pabbly_url": "https://connect.pabbly.com/workflow/mapping/XXXX",
+      "owner": "Ankit",
+      "tags": "payments, whatsapp",
+      "description": "Routes every captured payment by product and sends the right WhatsApp template.",
+      "steps": [
+        { "kind": "trigger", "app": "Razorpay", "event": "Payment Captured" },
+        { "kind": "action", "app": "Google Sheets", "event": "Add New Row", "notes": "Sheet: Orders 2026" },
+        {
+          "kind": "router",
+          "title": "Split by product",
+          "children": [
+            {
+              "kind": "route",
+              "title": "Master Kundali",
+              "condition": "Product Name (Text) Contains \"Kundali\"",
+              "children": [
+                { "kind": "action", "app": "Gallabox", "event": "Send Template Message", "notes": "Template: kundali_paid_v2" },
+                { "kind": "delay", "title": "Wait 10 minutes" }
+              ]
+            },
+            {
+              "kind": "route",
+              "title": "Name Correction",
+              "condition": "Product Name (Text) Contains \"Name\"",
+              "children": [
+                { "kind": "action", "app": "Gallabox", "event": "Send Template Message" },
+                {
+                  "kind": "router",
+                  "title": "Bump offer taken?",
+                  "children": [
+                    {
+                      "kind": "route",
+                      "title": "Took ₹3,999 bump",
+                      "condition": "Amount (Number) Greater than 3000",
+                      "children": [{ "kind": "action", "app": "Gallabox", "event": "Send Template Message" }]
+                    },
+                    {
+                      "kind": "route",
+                      "title": "No bump",
+                      "children": [{ "kind": "action", "app": "Gallabox", "event": "Send Template Message" }]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "route",
+              "title": "Everything else",
+              "children": [{ "kind": "action", "app": "Pabbly Email Marketing", "event": "Add Subscriber" }]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
