@@ -17,7 +17,6 @@
     "create-admin": "node server/scripts/create-admin.js"
   },
   "dependencies": {
-    "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "dotenv": "^18.0.10",
     "express": "^5.3.0",
@@ -26,6 +25,7 @@
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.72.0",
     "mysql2": "^3.24.6",
+    "nodemailer": "^10.5.0",
     "papaparse": "^5.7.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

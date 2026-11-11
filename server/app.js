@@ -3,6 +3,8 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { query } from './db.js';
 import { requireAuth } from './lib/auth.js';
+import { mailConfigured } from './lib/mailer.js';
+import { HttpError } from './lib/http.js';
 import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
 import flowsRoutes from './routes/flows.js';
@@ -11,6 +13,7 @@ import searchRoutes from './routes/search.js';
 import ioRoutes from './routes/io.js';
 import metaRoutes from './routes/meta.js';
 import activityRoutes from './routes/activity.js';
+import dashboardRoutes from './routes/dashboard.js';
 
 const app = express();
 
@@ -30,14 +33,15 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-// Public: used to check the deployment can reach the database.
+// Public: used to check the deployment can reach the database and send login emails.
 app.get('/api/health', async (_req, res) => {
+  const email = mailConfigured() ? 'configured' : 'not configured';
   try {
     await query('SELECT 1');
-    res.json({ ok: true, database: 'connected' });
+    res.json({ ok: true, database: 'connected', email });
   } catch (err) {
     console.error('Health check failed:', err.message);
-    res.status(500).json({ ok: false, database: 'unreachable' });
+    res.status(500).json({ ok: false, database: 'unreachable', email });
   }
 });
 
@@ -51,6 +55,7 @@ app.use('/api/steps', stepsRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/meta', metaRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 app.use('/api', ioRoutes); // /api/export, /api/import
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
@@ -66,7 +71,7 @@ app.use((err, _req, res, _next) => {
     status = 400;
     message = 'Invalid JSON in request body';
   }
-  if (status >= 500) {
+  if (status >= 500 && !(err instanceof HttpError)) {
     console.error(err);
     message = 'Something went wrong on the server. Please try again.';
   }

@@ -34,3 +34,40 @@ export function flowFields(body, partial = false) {
 }
 
 export const escapeLike = (s) => String(s).replace(/[\\%_]/g, (c) => `\\${c}`);
+
+/**
+ * "Documentation gaps": flows whose record is incomplete. Each sql is a WHERE condition on
+ * flows aliased as f. Used by the dashboard and by GET /api/flows?gap=<key>.
+ */
+export const GAPS = {
+  no_steps: {
+    label: 'No steps documented',
+    hint: 'Open the flow and add its trigger and steps',
+    sql: 'NOT EXISTS (SELECT 1 FROM steps s WHERE s.flow_id = f.id)',
+  },
+  no_link: {
+    label: 'Missing Pabbly link',
+    hint: 'Paste the workflow URL so people can jump straight to it',
+    sql: 'f.pabbly_url IS NULL',
+  },
+  no_owner: {
+    label: 'No owner',
+    hint: 'Say who to ask when this flow breaks',
+    sql: 'f.owner IS NULL',
+  },
+  no_webhook: {
+    label: 'Webhook trigger without webhook URL',
+    hint: 'The trigger is a webhook but its URL is not recorded',
+    sql: `f.webhook_url IS NULL AND (f.trigger_app LIKE '%webhook%'
+          OR EXISTS (SELECT 1 FROM steps s WHERE s.flow_id = f.id AND s.kind = 'trigger' AND s.app LIKE '%webhook%'))`,
+  },
+  empty_branch: {
+    label: 'Empty routers or routes',
+    hint: 'A router with no routes, or a route with no steps',
+    sql: `EXISTS (SELECT 1 FROM steps s WHERE s.flow_id = f.id AND s.kind IN ('router', 'route')
+          AND NOT EXISTS (SELECT 1 FROM steps c WHERE c.parent_id = s.id))`,
+  },
+};
+
+/** A flow counts as fully documented when it has steps, a Pabbly link and an owner. */
+export const DOCUMENTED_SQL = `NOT (${GAPS.no_steps.sql}) AND f.pabbly_url IS NOT NULL AND f.owner IS NOT NULL`;

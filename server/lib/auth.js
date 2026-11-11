@@ -48,7 +48,7 @@ export async function requireAuth(req, _res, next) {
     throw new HttpError(401, 'Your session has expired — please log in again');
   }
   const user = await queryOne('SELECT * FROM users WHERE id = ?', [payload.sub]);
-  // token_version changes on password change / deactivation, which logs out old sessions.
+  // token_version changes on "sign out everywhere", email change or deactivation, which ends old sessions.
   if (!user || !user.is_active || user.token_version !== payload.tv) {
     throw new HttpError(401, 'Your session has expired — please log in again');
   }

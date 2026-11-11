@@ -2,13 +2,16 @@
 
 An internal web app that keeps a record of every Pabbly Connect flow your team runs:
 
+- **Dashboard** at sign-in: flow totals, a status breakdown, documentation health, documentation gaps (no steps, no Pabbly link, no owner, and so on), flows by folder, most-used apps, recent changes, and quick search
 - **Every flow** with its Pabbly link, webhook URL, folder, status, owner, tags and notes
 - **The full step tree:** trigger → actions → **routers → routes (with conditions) → their own steps**. Routers can sit inside routes to any depth, and steps are numbered like `3.2.1` so people can refer to them.
-- **Login with roles** (Admin / Editor / Viewer), search across all flows and steps, CSV import, JSON backup, and a history of who changed what
+- **Sign-in with a one-time code by email** (no passwords), roles (Admin / Editor / Viewer), search across all flows and steps, CSV import, JSON backup, and a history of who changed what
 
-Stack: **React + Vite + TypeScript + Tailwind** (frontend), **Express + MySQL** (API), deployed as **one Vercel project**.
+Stack: **React + Vite + TypeScript + Tailwind** (frontend), **Express + MySQL** (API), **SMTP email** for login codes, deployed as **one Vercel project**.
 
 > The app doesn't connect to Pabbly. Pabbly has no public API for listing workflows, so this is your team's documented copy of your flows. Deleting something here never changes anything in Pabbly.
+
+> **Already running the first version (with passwords)?** Skip to **[Upgrading from the password version](#upgrading-from-the-password-version)**.
 
 ---
 
@@ -16,19 +19,23 @@ Stack: **React + Vite + TypeScript + Tailwind** (frontend), **Express + MySQL** 
 
 | Path | What it does |
 |---|---|
-| `src/` | React frontend |
 | `src/pages/` | One file per screen: `DashboardPage`, `FlowsPage`, `FlowDetailPage`, `SearchPage`, `ImportExportPage`, `UsersPage`, `ActivityPage`, `AccountPage`, `LoginPage` |
 | `src/components/StepTree.tsx` | Draws the step tree (routers, routes, nested steps) |
-| `src/components/StepFormModal.tsx` | Add / edit step form |
-| `src/components/FlowFormModal.tsx` | Add / edit flow form |
-| `src/lib/constants.ts` | Step types, their colours and icons; status and role labels |
+| `src/components/StepFormModal.tsx` / `FlowFormModal.tsx` | Add / edit forms for steps and flows |
+| `src/components/charts.tsx` | Dashboard charts: status bar, meter, ranked bar list |
+| `src/lib/constants.ts` | Step types (colours, icons), status / role labels, gap labels, chart colours |
 | `server/app.js` | Express app: security headers, CSRF guard, mounts all routes |
-| `server/routes/` | API endpoints: `auth`, `users`, `flows`, `steps`, `search`, `io` (import/export), `meta`, `activity` |
+| `server/routes/auth.js` | `request-otp`, `verify-otp`, `logout`, `logout-all`, `me` |
+| `server/routes/dashboard.js` | Everything the dashboard shows, in one request |
+| `server/routes/` (others) | `users`, `flows`, `steps`, `search`, `io` (import/export), `meta`, `activity` |
+| `server/lib/otp.js` | Code generation, hashing, comparison |
+| `server/lib/mailer.js` | Sends the login-code email (SMTP via nodemailer) |
+| `server/lib/flows.js` | Flow validation and the **documentation gap** definitions (`GAPS`) |
 | `server/lib/steps.js` | Step-tree rules (route only under router, etc.), tree building and numbering |
 | `server/lib/auth.js` | Session cookie, login check and role checks |
-| `server/migrations/001_init.sql` | Database tables |
-| `server/scripts/migrate.js` | `npm run migrate`: creates or updates the tables |
-| `server/scripts/create-admin.js` | `npm run create-admin`: creates the first admin |
+| `server/migrations/` | `001_init.sql` (tables), `002_otp_login.sql` (login codes, removes passwords) |
+| `server/scripts/migrate.js` | `npm run migrate`: applies any new migration files |
+| `server/scripts/create-admin.js` | `npm run create-admin`: creates or restores an admin |
 | `api/index.js` | Vercel entry point (wraps the Express app) |
 | `vercel.json` | Vercel build settings, URL rewrites, function region |
 | `docs/example-flow-import.json` | Example of a full flow (with nested routers) in the import format |
@@ -55,7 +62,21 @@ Vercel doesn't host MySQL, so the database lives on TiDB Cloud. It's MySQL-compa
    ```
    If the password contains `@ : / ? #`, URL-encode it (for example `@` becomes `%40`).
 
-## Step 2: Run it on your computer
+## Step 2: Set up the email account that sends login codes
+
+Every sign-in emails a 6-digit code, so the app needs an SMTP account. Use any one of these:
+
+| Provider | Settings | Notes |
+|---|---|---|
+| **Zoho Mail** (if your domain email is on Zoho) | `SMTP_HOST=smtp.zoho.in`, `SMTP_PORT=465` | Zoho → My Account → Security → **App Passwords** → create one and use it as `SMTP_PASS`. `MAIL_FROM` must be that Zoho address. |
+| **Gmail / Google Workspace** | `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465` | Turn on 2-Step Verification, then create an **App Password** (Google Account → Security). Use it as `SMTP_PASS`. |
+| **Brevo** (free 300 emails/day) | `SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=587` | Brevo → **SMTP & API** → create an SMTP key. Verify your sender address in Brevo first. |
+
+You'll need five values: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER` (the login, usually the email address), `SMTP_PASS` and `MAIL_FROM` (e.g. `Pabbly Flow Manager <no-reply@thebatraanumerology.com>`).
+
+> Running locally, you can leave `SMTP_HOST` empty. The code is then **printed in the terminal** running `npm run dev`, which is handy for testing. On Vercel, SMTP is required or nobody can sign in.
+
+## Step 3: Run it on your computer
 
 You need **Node.js 20 or newer** (`node -v` to check).
 
@@ -71,6 +92,13 @@ Open `.env` and set:
 DATABASE_URL=mysql://xxxxxxxx.root:YOURPASSWORD@gateway01.ap-south-1.prod.aws.tidbcloud.com:4000/pabbly_flows
 DB_SSL=true
 JWT_SECRET=paste-a-long-random-string-here
+
+# from Step 2 (or leave SMTP_HOST empty to see codes in the terminal)
+SMTP_HOST=smtp.zoho.in
+SMTP_PORT=465
+SMTP_USER=no-reply@yourdomain.com
+SMTP_PASS=your-app-password
+MAIL_FROM="Pabbly Flow Manager <no-reply@yourdomain.com>"
 ```
 
 Generate the `JWT_SECRET` with:
@@ -79,11 +107,11 @@ Generate the `JWT_SECRET` with:
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-Create the tables and your admin login. Both are one-time steps, and they write straight into the TiDB database:
+Create the tables and your admin account. Both are one-time steps, and they write straight into the TiDB database:
 
 ```bash
 npm run migrate
-npm run create-admin -- "Your Name" you@yourcompany.com "ChooseAStrongPassword"
+npm run create-admin -- "Your Name" you@yourcompany.com
 ```
 
 Start the app:
@@ -92,11 +120,9 @@ Start the app:
 npm run dev
 ```
 
-Open **http://localhost:5173** and log in. The API runs on port 4000; Vite forwards `/api` to it automatically.
+Open **http://localhost:5173**, enter your email, then type in the 6-digit code from your inbox (or from the terminal if SMTP is empty).
 
-> **Using a local MySQL instead?** Set `DATABASE_URL=mysql://root:password@127.0.0.1:3306/pabbly_flows` and `DB_SSL=false`, and create the `pabbly_flows` database first.
-
-## Step 3: Put the code on GitHub
+## Step 4: Put the code on GitHub
 
 Create an **empty private** repository on GitHub, then:
 
@@ -111,20 +137,25 @@ git push -u origin main
 
 `.env` is in `.gitignore`, so your passwords are never pushed.
 
-## Step 4: Deploy on Vercel
+## Step 5: Deploy on Vercel
 
 1. Go to **vercel.com → Add New → Project** and import the GitHub repo.
 2. Framework preset: **Vite**. It's picked up from `vercel.json`, so leave the build settings as they are.
-3. Open **Environment Variables** and add these three (same values as your `.env`):
+3. Open **Environment Variables** and add these (same values as your `.env`):
 
    | Name | Value |
    |---|---|
    | `DATABASE_URL` | your TiDB connection string |
    | `DB_SSL` | `true` |
    | `JWT_SECRET` | the same long random string |
+   | `SMTP_HOST` | e.g. `smtp.zoho.in` |
+   | `SMTP_PORT` | `465` (or `587` for Brevo) |
+   | `SMTP_USER` | SMTP login |
+   | `SMTP_PASS` | app password / SMTP key |
+   | `MAIL_FROM` | `Pabbly Flow Manager <no-reply@yourdomain.com>` |
 
 4. Click **Deploy**.
-5. When it finishes, open `https://YOUR-PROJECT.vercel.app/api/health`. It should show `{"ok":true,"database":"connected"}`. Then open the main URL and log in.
+5. When it finishes, open `https://YOUR-PROJECT.vercel.app/api/health`. It should show `{"ok":true,"database":"connected","email":"configured"}`. Then open the main URL and sign in.
 
 **Function region:** `vercel.json` has `"regions": ["bom1"]` (Mumbai). This keeps the API next to a Mumbai database. If your TiDB cluster is in Singapore, change it to `"sin1"`, then commit and push. A mismatched region makes every page slow.
 
@@ -132,9 +163,9 @@ git push -u origin main
 
 From now on, every `git push` to `main` redeploys automatically. Run `npm run migrate` from your computer only when a new file appears in `server/migrations/`.
 
-## Step 5: Add your team
+## Step 6: Add your team
 
-Log in as admin → **Users → Add user**. Pick a role and share the generated password privately. Each person can change it under **My account**.
+Log in as admin → **Users → Add user** (name, email, role). There are no passwords to share: tell them to open the app and enter their email.
 
 | Role | Can do |
 |---|---|
@@ -142,9 +173,14 @@ Log in as admin → **Users → Add user**. Pick a role and share the generated 
 | **Editor** | Add and edit flows, steps, routers and routes; import CSV / JSON |
 | **Viewer** | Read-only. Edit buttons are hidden and the API blocks edits too |
 
-Deactivating a user or resetting their password logs them out of every device immediately.
+From the Users page an admin can also:
+- change a person's **name or email** (changing the email signs them out, and future codes go to the new address)
+- **sign them out of all devices**
+- **deactivate** them, which signs them out immediately and stops any new codes
 
-## Step 6: Load your 100+ flows
+Anyone can use **My account → Sign out everywhere** for their own sessions.
+
+## Step 7: Load your 100+ flows
 
 1. **Import / Export → Download the CSV template.**
 2. Fill in one row per Pabbly flow in Excel or Google Sheets. Only `name` is required. Useful columns: `folder`, `status` (active / inactive / draft; ON / OFF also work), `trigger_app`, `pabbly_url`, `webhook_url`, `owner`, `tags`, `description`, `notes`.
@@ -153,7 +189,7 @@ Deactivating a user or resetting their password logs them out of every device im
    - **Skip existing** (default): flows whose name already exists are left alone.
    - **Update existing:** fills in or overwrites fields from the file. Empty cells are ignored.
    - **Always create new**
-4. Open each flow and add its steps (next section).
+4. Open each flow and add its steps (next section). The dashboard's **Documentation gaps** list shows what's still missing. Click any line to see those flows.
 
 To bring in **complete flows with all their routers in one go**, use **Restore from JSON backup** with a file in the format of `docs/example-flow-import.json`.
 
@@ -174,11 +210,87 @@ Use the ⬆ ⬇ buttons to reorder steps, and **Insert step below** to add one i
 
 ---
 
+## How sign-in works
+
+1. The person enters their email and clicks **Send login code**.
+2. If that email belongs to an active user, a 6-digit code is emailed. The screen shows the same message either way, so it can't be used to find out who has access.
+3. They type the code (pasting with spaces works too) and are signed in for `SESSION_DAYS` days (default 7).
+
+Rules, all set in `server/config.js` → `otp`:
+
+| Rule | Value |
+|---|---|
+| Code expires after | 10 minutes |
+| Code can be used | once |
+| Wrong tries per code | 5, then the code is locked and they request a new one |
+| Wait before resending | 60 seconds (only while the previous code is unused) |
+| Codes per person per hour | 6 |
+| Requesting a new code | makes the previous one stop working |
+| Per-network limits | 30 code requests and 30 wrong codes per 15 minutes per IP |
+
+Codes are stored only as an HMAC hash, never in plain text.
+
+---
+
+## Upgrading from the password version
+
+Do these **in this order**, so there's no time when nobody can sign in:
+
+1. **Replace the project files** with this version (keep your `.env`). Then run:
+   ```bash
+   npm install
+   ```
+   This adds `nodemailer` and removes `bcryptjs`.
+2. **Add the SMTP settings** from Step 2:
+   - in your local `.env`
+   - in **Vercel → Settings → Environment Variables** (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`)
+3. **Update the database** from your computer:
+   ```bash
+   npm run migrate
+   ```
+   This applies `002_otp_login.sql`: it creates the `login_otps` table and **deletes all stored password hashes**. From this moment the old password login stops working.
+4. **Deploy:**
+   ```bash
+   git add -A
+   git commit -m "OTP login + new dashboard"
+   git push
+   ```
+5. Open `/api/health` and check it says `"email":"configured"`. Then sign in with your email and the code.
+
+Existing users keep their accounts and roles; they just sign in with their email from now on.
+
+**Files changed in this update:**
+
+| File | Change |
+|---|---|
+| `server/migrations/002_otp_login.sql` | **new**: login code table, removes passwords |
+| `server/lib/otp.js`, `server/lib/mailer.js` | **new**: code generation and email sending |
+| `server/routes/auth.js` | rewritten: `request-otp`, `verify-otp`, `logout-all` (password login and change-password removed) |
+| `server/routes/users.js` | no passwords; admins can edit email and sign users out everywhere |
+| `server/routes/dashboard.js` | **new**: `/api/dashboard` |
+| `server/lib/flows.js` | added `GAPS` and `DOCUMENTED_SQL` |
+| `server/routes/flows.js` | `GET /api/flows?gap=…` filter |
+| `server/config.js` | SMTP and OTP settings |
+| `server/app.js` | mounts `/api/dashboard`; `/api/health` reports email status; user-facing 5xx messages |
+| `server/lib/http.js`, `server/lib/validate.js`, `server/lib/auth.js` | small clean-ups (password helpers removed) |
+| `server/scripts/create-admin.js` | no password argument |
+| `src/pages/LoginPage.tsx` | rewritten: email → code, resend timer, auto-submit |
+| `src/pages/DashboardPage.tsx` | rewritten: new dashboard |
+| `src/components/charts.tsx` | **new**: status bar, meter, bar list |
+| `src/pages/AccountPage.tsx` | password form replaced by "Sign out everywhere" |
+| `src/pages/UsersPage.tsx` | no passwords; edit name/email; sign a user out everywhere |
+| `src/pages/FlowsPage.tsx` | understands `?gap=` links from the dashboard |
+| `src/lib/auth.tsx` | `requestOtp`, `verifyOtp`, `logoutEverywhere` |
+| `src/lib/types.ts`, `src/lib/constants.ts`, `src/components/ui.tsx`, `src/components/Layout.tsx` | supporting types, labels, ref-able inputs, account icon |
+| `.env.example`, `package.json`, `README.md` | SMTP settings, nodemailer, these docs |
+
+---
+
 ## Common changes (where to edit)
 
 **Add a new field to flows (e.g. "WhatsApp number used"):**
 
-1. Create `server/migrations/002_add_whatsapp_number.sql`:
+1. Create `server/migrations/003_add_whatsapp_number.sql`:
    ```sql
    ALTER TABLE flows ADD COLUMN whatsapp_number VARCHAR(30) NULL;
    ```
@@ -190,11 +302,19 @@ Use the ⬆ ⬇ buttons to reorder steps, and **Insert step below** to add one i
 5. `src/components/FlowFormModal.tsx` → add `whatsapp_number: ''` to `EMPTY`, include it in the edit pre-fill, and add a `<Field>` with an `<Input>`.
 6. `src/pages/FlowDetailPage.tsx` → add a `<Detail label="WhatsApp number">` in the Details card.
 
+**Add a new documentation gap (e.g. "No tags"):**
+
+1. `server/lib/flows.js` → add to `GAPS`:
+   `no_tags: { label: 'No tags', hint: 'Add tags so flows are easier to filter', sql: 'f.tags IS NULL' },`
+2. `src/lib/constants.ts` → add `no_tags: 'No tags'` to `GAP_LABELS`, and `'no_tags'` to `GapKey` in `src/lib/types.ts`.
+
 **Add a new step type (e.g. "Email Parser"):**
 
 1. `server/lib/validate.js` → add `'parser'` to `STEP_KINDS`.
 2. `src/lib/types.ts` → add `'parser'` to `StepKind`.
 3. `src/lib/constants.ts` → add a `parser: { label, icon, hint, chip, iconBox, accent, hasApp, hasCondition }` entry to `KIND_META`. Copy an existing entry and change the colours.
+
+**Change code expiry, attempts or resend wait:** edit `otp` in `server/config.js`.
 
 **Change how long a login lasts:** set the `SESSION_DAYS` environment variable (default 7).
 
@@ -204,17 +324,22 @@ Use the ⬆ ⬇ buttons to reorder steps, and **Insert step below** to add one i
 
 | Problem | Fix |
 |---|---|
-| `/api/health` shows `database: unreachable` | Check `DATABASE_URL` in Vercel (user, password, host, port 4000, database name) and that `DB_SSL=true` for TiDB. Then **Redeploy** (env changes need a redeploy). |
-| Vercel function log says `Missing environment variable` | One of the three variables isn't set for the **Production** environment. |
-| `npm run migrate` says access denied / SSL error | Wrong password, or `DB_SSL` isn't `true` for a cloud database. |
-| Login says "Too many login attempts" | 20 wrong passwords in 15 minutes from one network. Wait 15 minutes. |
-| Forgot the admin password | Run `npm run create-admin -- "Name" same@email.com "NewPassword"` from your computer. It resets the password and keeps the account an admin. |
-| Pages feel slow on Vercel | The function region in `vercel.json` doesn't match the database region (see Step 4). |
+| Code email never arrives | Check spam first. Then open `/api/health`: if it says `"email":"not configured"`, the SMTP variables are missing in Vercel (redeploy after adding them). If it says `configured`, look at Vercel → Logs for `Sending login code failed:`, which shows the SMTP error (usually a wrong app password, or `MAIL_FROM` not allowed by the provider). |
+| "We could not send the email right now" | The SMTP server refused the email. Same log check as above. |
+| "Too many codes requested for this email" | More than 6 codes in an hour for that person. Wait an hour. |
+| "Too many code requests / wrong codes from this network" | Per-IP limit hit. Wait 15 minutes. |
+| `/api/health` shows `database: unreachable` | Check `DATABASE_URL` in Vercel (user, password, host, port 4000, database name) and that `DB_SSL=true` for TiDB. Then **Redeploy**. |
+| Vercel function log says `Missing environment variable` | One of the required variables isn't set for the **Production** environment. |
+| Locked out (no admin can sign in) | From your computer, run `npm run create-admin -- "Name" your@email.com`. It re-activates the account and makes it admin. Leave `SMTP_HOST` empty in your local `.env` to get the code in the terminal. |
+| Pages feel slow on Vercel | The function region in `vercel.json` doesn't match the database region (see Step 5). |
 
 ## Security notes
 
-- Passwords are stored as bcrypt hashes. The session lives in an **httpOnly, SameSite=Lax, Secure** cookie, so page scripts can't read it.
+- **No passwords are stored.** Login codes are random 6-digit numbers, stored only as an HMAC hash, valid for 10 minutes, single-use, and locked after 5 wrong tries.
+- The login screen gives the same reply for unknown and known emails.
+- Sessions live in an **httpOnly, SameSite=Lax, Secure** cookie, so page scripts can't read it. Deactivating a user, changing their email, or "Sign out everywhere" ends their sessions at once.
 - Every write request needs an `X-Requested-With: pfm` header. Browsers can't add this header to requests from other sites, which blocks cross-site request forgery.
 - Only `http(s)://` links are accepted for the Pabbly and webhook URLs, so links can't run scripts.
 - Webhook URLs let anyone send data into a flow, which is why the whole app sits behind login. Give the Viewer role to people who only need to look.
+- Whoever controls a user's mailbox can sign in as them, so keep team mailboxes protected (2-step verification on Zoho / Google).
 - The site sends `noindex`, so search engines won't list it.

@@ -5,11 +5,12 @@ import { api, errorMessage } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useMeta } from '../lib/meta';
 import { formatDateTime, isHttpUrl, splitTags, timeAgo } from '../lib/format';
+import { GAP_LABELS } from '../lib/constants';
 import type { FlowSummary } from '../lib/types';
 import FlowFormModal from '../components/FlowFormModal';
 import { Button, Card, CopyButton, EmptyState, ErrorBanner, IconButton, Input, PageLoader, Select, StatusBadge, Tag } from '../components/ui';
 
-const FILTER_KEYS = ['q', 'status', 'folder', 'app', 'tag'] as const;
+const FILTER_KEYS = ['q', 'status', 'folder', 'app', 'tag', 'gap'] as const;
 
 export default function FlowsPage() {
   const [params, setParams] = useSearchParams();
@@ -116,6 +117,16 @@ export default function FlowsPage() {
           ) : null}
         </div>
 
+        {params.get('gap') && GAP_LABELS[params.get('gap')!] && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-amber-100 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 sm:px-5">
+            <span>
+              Showing flows with: <b>{GAP_LABELS[params.get('gap')!]}</b>
+            </span>
+            <button onClick={() => setParam('gap', '')} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium hover:bg-amber-100">
+              <X className="size-3.5" /> Remove
+            </button>
+          </div>
+        )}
         {error && <div className="p-4"><ErrorBanner message={error} onRetry={load} /></div>}
         {!flows && !error && <PageLoader />}
         {flows && flows.length === 0 && (

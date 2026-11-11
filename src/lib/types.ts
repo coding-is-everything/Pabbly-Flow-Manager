@@ -130,3 +130,19 @@ export interface PortableFlow {
   notes?: string;
   steps?: PortableStep[];
 }
+
+export type GapKey = 'no_steps' | 'no_link' | 'no_owner' | 'no_webhook' | 'empty_branch';
+
+export interface Dashboard {
+  counts: {
+    flows: number; active: number; inactive: number; draft: number;
+    steps: number; routers: number; routes: number; apps: number; documented: number;
+  };
+  folders: { folder: string; count: number }[];
+  more_folders: number;
+  unfiled: number;
+  apps: { app: string; flows: number }[];
+  gaps: { key: GapKey; label: string; hint: string; count: number; sample: { id: number; name: string }[] }[];
+  recent_flows: { id: number; name: string; status: FlowStatus; folder: string | null; updated_at: string; updated_by_name: string | null; steps_count: number }[];
+  activity: Activity[];
+}

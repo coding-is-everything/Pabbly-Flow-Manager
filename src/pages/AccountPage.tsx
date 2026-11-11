@@ -1,38 +1,29 @@
-import { useState, type FormEvent } from 'react';
-import { api, errorMessage } from '../lib/api';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { LogOut, Mail } from 'lucide-react';
+import { errorMessage } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ROLE_META } from '../lib/constants';
+import { formatDateTime } from '../lib/format';
 import { useToast } from '../components/Toast';
-import { Button, Card, ErrorBanner, Field, Input, RoleBadge } from '../components/ui';
+import { Button, Card, ConfirmModal, RoleBadge } from '../components/ui';
 
 export default function AccountPage() {
-  const { user } = useAuth();
+  const { user, logoutEverywhere } = useAuth();
   const toast = useToast();
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [confirm, setConfirm] = useState('');
+  const navigate = useNavigate();
+  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
 
   if (!user) return null;
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (next !== confirm) {
-      setError('The new passwords do not match');
-      return;
-    }
+  const signOutEverywhere = async () => {
     setBusy(true);
     try {
-      await api('/auth/change-password', 'POST', { current_password: current, new_password: next });
-      toast('Password changed. Other devices have been logged out.');
-      setCurrent('');
-      setNext('');
-      setConfirm('');
+      await logoutEverywhere();
+      navigate('/login');
     } catch (err) {
-      setError(errorMessage(err));
-    } finally {
+      toast(errorMessage(err), 'error');
       setBusy(false);
     }
   };
@@ -57,23 +48,38 @@ export default function AccountPage() {
           </div>
         </dl>
       </Card>
-      <Card title="Change password">
-        <form onSubmit={submit} className="space-y-4 p-5">
-          {error && <ErrorBanner message={error} />}
-          <Field label="Current password">
-            <Input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
-          </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="New password" hint="At least 8 characters">
-              <Input type="password" autoComplete="new-password" minLength={8} value={next} onChange={(e) => setNext(e.target.value)} required />
-            </Field>
-            <Field label="Confirm new password">
-              <Input type="password" autoComplete="new-password" minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
-            </Field>
+
+      <Card title="Sign-in & security">
+        <div className="space-y-4 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+              <Mail className="size-4" />
+            </div>
+            <div className="text-sm">
+              <p className="font-medium text-slate-900">One-time code by email</p>
+              <p className="text-slate-500">
+                There is no password. Each time you sign in, a 6-digit code is sent to <b className="text-slate-700">{user.email}</b>. To change
+                this email, ask an admin.
+              </p>
+              <p className="mt-1 text-xs text-slate-500">Last sign-in: {formatDateTime(user.last_login_at)}</p>
+            </div>
           </div>
-          <Button type="submit" loading={busy}>Change password</Button>
-        </form>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <p className="text-sm text-slate-600">Lost a phone or used a shared computer? End every session, including this one.</p>
+            <Button variant="secondary" icon={LogOut} onClick={() => setConfirming(true)}>Sign out everywhere</Button>
+          </div>
+        </div>
       </Card>
+
+      <ConfirmModal
+        open={confirming}
+        title="Sign out of all devices?"
+        message="You will be signed out here and on every other device. Sign back in with a new code from your email."
+        confirmLabel="Sign out everywhere"
+        loading={busy}
+        onConfirm={signOutEverywhere}
+        onClose={() => setConfirming(false)}
+      />
     </div>
   );
 }

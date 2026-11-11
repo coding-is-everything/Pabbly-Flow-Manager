@@ -47,3 +47,20 @@ export const ROLE_META: Record<Role, { label: string; badge: string; hint: strin
   editor: { label: 'Editor', badge: 'bg-sky-50 text-sky-700 ring-sky-600/20', hint: 'Add and edit flows, steps and imports' },
   viewer: { label: 'Viewer', badge: 'bg-slate-100 text-slate-700 ring-slate-500/20', hint: 'Read-only access' },
 };
+
+/** Labels for the ?gap= filter on the flows list (same keys as GAPS in server/lib/flows.js). */
+export const GAP_LABELS: Record<string, string> = {
+  no_steps: 'No steps documented',
+  no_link: 'Missing Pabbly link',
+  no_owner: 'No owner',
+  no_webhook: 'Webhook trigger without webhook URL',
+  empty_branch: 'Empty routers or routes',
+};
+
+/** Status colours for charts. Order Active → Draft → Inactive keeps green and red apart
+ *  (validated for colour-blind separation and 3:1 contrast). */
+export const STATUS_CHART = {
+  active: { color: '#047857', ink: '#ffffff' },
+  draft: { color: '#d97706', ink: '#1c1917' },
+  inactive: { color: '#e11d48', ink: '#ffffff' },
+} as const;

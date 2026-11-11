@@ -3,7 +3,7 @@ import { query, queryOne, transaction } from '../db.js';
 import { badRequest, notFound, toId } from '../lib/http.js';
 import { adminOnly, canEdit } from '../lib/auth.js';
 import { STEP_KINDS, oneOf } from '../lib/validate.js';
-import { FLOW_FIELD_LABELS, escapeLike, flowFields } from '../lib/flows.js';
+import { FLOW_FIELD_LABELS, GAPS, escapeLike, flowFields } from '../lib/flows.js';
 import { buildTree, insertTree, normalizeSiblings, placementError, stepFields, stepLabel } from '../lib/steps.js';
 import { logActivity, touchFlow } from '../lib/activity.js';
 
@@ -43,6 +43,12 @@ router.get('/', async (req, res) => {
   if (tag) {
     where.push("CONCAT(', ', f.tags, ', ') LIKE ?");
     params.push(`%, ${escapeLike(String(tag).trim())}, %`);
+  }
+  // ?gap=no_steps | no_link | no_owner | no_webhook | empty_branch (see GAPS in lib/flows.js)
+  if (req.query.gap) {
+    const gap = GAPS[String(req.query.gap)];
+    if (!gap) throw badRequest(`Unknown gap filter. Use one of: ${Object.keys(GAPS).join(', ')}`);
+    where.push(`(${gap.sql})`);
   }
 
   const order = SORTS[req.query.sort] || SORTS.updated;

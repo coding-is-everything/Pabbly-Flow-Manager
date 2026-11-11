@@ -62,9 +62,3 @@ export function email(value) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) throw badRequest('Enter a valid email address');
   return s;
 }
-
-export function password(value, label = 'Password') {
-  if (typeof value !== 'string' || value.length < 8) throw badRequest(`${label} must be at least 8 characters`);
-  if (value.length > 72) throw badRequest(`${label} must be at most 72 characters`);
-  return value;
-}

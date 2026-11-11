@@ -2,6 +2,7 @@ export class HttpError extends Error {
   constructor(status, message) {
     super(message);
     this.status = status;
+    // Messages from HttpError are written for the user, so app.js shows them even for 5xx.
   }
 }
 

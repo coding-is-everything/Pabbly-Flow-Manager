@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { History, KeyRound, LayoutDashboard, LogOut, Menu, Search, Upload, Users, Workflow, X } from 'lucide-react';
+import { History, LayoutDashboard, LogOut, Menu, Search, Settings, Upload, Users, Workflow, X } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { MetaProvider } from '../lib/meta';
 import { RoleBadge, cx } from './ui';
@@ -67,7 +67,7 @@ export default function Layout() {
             <div className="truncate text-sm font-medium text-white">{user?.name}</div>
             <div className="truncate text-xs text-slate-400">{user?.email}</div>
           </div>
-          <KeyRound className="size-4 text-slate-400" />
+          <Settings className="size-4 text-slate-400" />
         </NavLink>
         <button
           onClick={() => logout().then(() => navigate('/login'))}
